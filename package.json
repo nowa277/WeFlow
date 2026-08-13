@@ -79,7 +79,7 @@
     "appId": "com.WeFlow.app",
     "publish": {
       "provider": "github",
-      "owner": "hicccc77",
+      "owner": "nowa277",
       "repo": "WeFlow",
       "releaseType": "release"
     },
@@ -175,7 +175,8 @@
       "icon": "public/icon.png",
       "target": [
         "appimage",
-        "tar.gz"
+        "tar.gz",
+        "deb"
       ],
       "category": "Utility",
       "executableName": "weflow",
