@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# One active Build and Release per tag; queue instead of cancelling mid-upload.
+concurrency:
+  group: build-and-release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
@@ -84,16 +89,23 @@ jobs:
           REPO=${{ github.repository }}
           MINIMUM_VERSION="4.1.7"
           wait_for_release_id "$REPO" "$TAG" 12 2 >/dev/null
-          for YML_FILE in latest-mac.yml latest-arm64-mac.yml; do
-            if ! retry_cmd 5 3 gh release download "$TAG" --repo "$REPO" --pattern "$YML_FILE" --output "/tmp/$YML_FILE"; then
-              echo "Skip $YML_FILE because download failed after retries."
-              continue
+          # latest-mac.yml is required; latest-arm64-mac.yml is optional noise.
+          if ! retry_cmd 8 5 gh release download "$TAG" --repo "$REPO" --pattern "latest-mac.yml" --output "/tmp/latest-mac.yml"; then
+            echo "::error::required feed latest-mac.yml missing from release $TAG"
+            exit 1
+          fi
+          if ! grep -q 'minimumVersion' "/tmp/latest-mac.yml"; then
+            echo "minimumVersion: $MINIMUM_VERSION" >> "/tmp/latest-mac.yml"
+          fi
+          retry_cmd 5 3 gh release upload "$TAG" --repo "$REPO" "/tmp/latest-mac.yml" --clobber
+          if retry_cmd 3 2 gh release download "$TAG" --repo "$REPO" --pattern "latest-arm64-mac.yml" --output "/tmp/latest-arm64-mac.yml"; then
+            if ! grep -q 'minimumVersion' "/tmp/latest-arm64-mac.yml"; then
+              echo "minimumVersion: $MINIMUM_VERSION" >> "/tmp/latest-arm64-mac.yml"
             fi
-            if ! grep -q 'minimumVersion' "/tmp/$YML_FILE"; then
-              echo "minimumVersion: $MINIMUM_VERSION" >> "/tmp/$YML_FILE"
-            fi
-            retry_cmd 5 3 gh release upload "$TAG" --repo "$REPO" "/tmp/$YML_FILE" --clobber
-          done
+            retry_cmd 5 3 gh release upload "$TAG" --repo "$REPO" "/tmp/latest-arm64-mac.yml" --clobber
+          else
+            echo "Skip optional latest-arm64-mac.yml (not published)."
+          fi
 
   release-linux:
     runs-on: ubuntu-latest
@@ -147,8 +159,11 @@ jobs:
           REPO=${{ github.repository }}
           MINIMUM_VERSION="4.1.7"
           wait_for_release_id "$REPO" "$TAG" 12 2 >/dev/null
-          retry_cmd 5 3 gh release download "$TAG" --repo "$REPO" --pattern "latest-linux.yml" --output "/tmp/latest-linux.yml" || true
-          if [ -f /tmp/latest-linux.yml ] && ! grep -q 'minimumVersion' /tmp/latest-linux.yml; then
+          if ! retry_cmd 8 5 gh release download "$TAG" --repo "$REPO" --pattern "latest-linux.yml" --output "/tmp/latest-linux.yml"; then
+            echo "::error::required feed latest-linux.yml missing from release $TAG"
+            exit 1
+          fi
+          if ! grep -q 'minimumVersion' /tmp/latest-linux.yml; then
             echo "minimumVersion: $MINIMUM_VERSION" >> /tmp/latest-linux.yml
             retry_cmd 5 3 gh release upload "$TAG" --repo "$REPO" /tmp/latest-linux.yml --clobber
           fi
@@ -200,8 +215,11 @@ jobs:
           REPO=${{ github.repository }}
           MINIMUM_VERSION="4.1.7"
           wait_for_release_id "$REPO" "$TAG" 12 2 >/dev/null
-          retry_cmd 5 3 gh release download "$TAG" --repo "$REPO" --pattern "latest.yml" --output "/tmp/latest.yml" || true
-          if [ -f /tmp/latest.yml ] && ! grep -q 'minimumVersion' /tmp/latest.yml; then
+          if ! retry_cmd 8 5 gh release download "$TAG" --repo "$REPO" --pattern "latest.yml" --output "/tmp/latest.yml"; then
+            echo "::error::required feed latest.yml missing from release $TAG"
+            exit 1
+          fi
+          if ! grep -q 'minimumVersion' /tmp/latest.yml; then
             echo "minimumVersion: $MINIMUM_VERSION" >> /tmp/latest.yml
             retry_cmd 5 3 gh release upload "$TAG" --repo "$REPO" /tmp/latest.yml --clobber
           fi
@@ -253,8 +271,11 @@ jobs:
           REPO=${{ github.repository }}
           MINIMUM_VERSION="4.1.7"
           wait_for_release_id "$REPO" "$TAG" 12 2 >/dev/null
-          retry_cmd 5 3 gh release download "$TAG" --repo "$REPO" --pattern "latest-arm64.yml" --output "/tmp/latest-arm64.yml" || true
-          if [ -f /tmp/latest-arm64.yml ] && ! grep -q 'minimumVersion' /tmp/latest-arm64.yml; then
+          if ! retry_cmd 8 5 gh release download "$TAG" --repo "$REPO" --pattern "latest-arm64.yml" --output "/tmp/latest-arm64.yml"; then
+            echo "::error::required feed latest-arm64.yml missing from release $TAG"
+            exit 1
+          fi
+          if ! grep -q 'minimumVersion' /tmp/latest-arm64.yml; then
             echo "minimumVersion: $MINIMUM_VERSION" >> /tmp/latest-arm64.yml
             retry_cmd 5 3 gh release upload "$TAG" --repo "$REPO" /tmp/latest-arm64.yml --clobber
           fi
