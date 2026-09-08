@@ -363,6 +363,40 @@ jobs:
 
           retry_cmd 5 3 gh release edit "$TAG" --repo "$REPO" --notes-file release_notes.md
 
+  finalize-release:
+    runs-on: ubuntu-latest
+    needs: [release-mac-arm64, release-linux, release, release-windows-arm64, update-release-notes]
+    steps:
+      - name: Check out git repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - name: Publish release and verify /latest points at this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .github/scripts/release-utils.sh
+          TAG=${GITHUB_REF_NAME}
+          REPO=${{ github.repository }}
+          wait_for_release_id "$REPO" "$TAG" 12 2 >/dev/null
+          # Leave draft and mark as latest for this tag.
+          retry_cmd 5 3 gh release edit "$TAG" --repo "$REPO" --draft=false --latest
+          # Confirm the release is public.
+          draft_state="$(gh release view "$TAG" --repo "$REPO" --json isDraft --jq '.isDraft')"
+          if [ "$draft_state" != "false" ]; then
+            echo "::error::release $TAG is still draft after undraft"
+            exit 1
+          fi
+          # Confirm /latest resolves to this tag (stable channel).
+          latest_tag="$(gh api "repos/$REPO/releases/latest" --jq '.tag_name')"
+          if [ "$latest_tag" != "$TAG" ]; then
+            echo "::error::/latest points at $latest_tag, expected $TAG"
+            exit 1
+          fi
+          echo "Release $TAG is public and /latest -> $TAG"
+
   deploy-aur:
     runs-on: ubuntu-latest
     needs: [release-linux]
