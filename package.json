@@ -175,8 +175,7 @@
       "icon": "public/icon.png",
       "target": [
         "appimage",
-        "tar.gz",
-        "deb"
+        "tar.gz"
       ],
       "category": "Utility",
       "executableName": "weflow",
