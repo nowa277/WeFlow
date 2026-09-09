@@ -1,0 +1,97 @@
+# Install smoke only: silent-install published win/mac packages and assert version.
+# Does NOT validate electron-updater GUI check/download/apply. Real upgrade acceptance needs a physical machine.
+name: Install Smoke (win/mac)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to smoke (e.g. v5.0.1)
+        required: true
+        default: v5.0.1
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64-install:
+    runs-on: windows-latest
+    steps:
+      - name: Download Windows x64 installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern "*-x64-Setup.exe" --dir "$RUNNER_TEMP/installer"
+          ls -lh "$RUNNER_TEMP/installer"
+
+      - name: Silent install and assert version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "${{ inputs.tag }}"
+          $expected = $tag.TrimStart("v")
+          $exe = Get-ChildItem -Path "$env:RUNNER_TEMP\installer" -Filter "*-x64-Setup.exe" | Select-Object -First 1
+          if (-not $exe) { throw "x64 Setup.exe not found" }
+
+          Write-Host "Installing $($exe.FullName) silently..."
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList "/S" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer exit code $($p.ExitCode)" }
+
+          $candidates = @(
+            Join-Path $env:LOCALAPPDATA "Programs\WeFlow\WeFlow.exe"
+            Join-Path $env:LOCALAPPDATA "Programs\weflow\WeFlow.exe"
+            Join-Path ${env:ProgramFiles} "WeFlow\WeFlow.exe"
+          )
+          $app = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $app) {
+            Get-ChildItem -Path "$env:LOCALAPPDATA\Programs" -Recurse -Filter "WeFlow.exe" -ErrorAction SilentlyContinue | Select-Object -First 5 FullName
+            throw "WeFlow.exe not found after silent install"
+          }
+
+          $info = (Get-Item $app).VersionInfo
+          $got = @($info.ProductVersion, $info.FileVersion) | Where-Object { $_ } | Select-Object -First 1
+          $got = ($got -replace "^v", "").Split("+")[0].Split("-")[0].Trim()
+          Write-Host "Installed at $app version=$got expected=$expected"
+          if ($got -ne $expected) { throw "Version mismatch: got $got expected $expected" }
+
+  macos-arm64-install:
+    runs-on: macos-14
+    steps:
+      - name: Download macOS zip
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern "*-Setup.zip" --dir "$RUNNER_TEMP/installer"
+          ls -lh "$RUNNER_TEMP/installer"
+
+      - name: Extract and assert Info.plist version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          EXPECTED="${TAG#v}"
+          ZIP=$(ls "$RUNNER_TEMP/installer"/*-Setup.zip | head -1)
+          DEST="$RUNNER_TEMP/WeFlowApp"
+          mkdir -p "$DEST"
+          unzip -q "$ZIP" -d "$DEST"
+          APP=$(find "$DEST" -maxdepth 3 -name "WeFlow.app" -type d | head -1)
+          if [[ -z "$APP" ]]; then
+            find "$DEST" -maxdepth 4 -print | head -50
+            echo "::error::WeFlow.app not found in zip"
+            exit 1
+          fi
+          PLIST="$APP/Contents/Info.plist"
+          GOT=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")
+          GOT="${GOT#v}"
+          echo "App=$APP version=$GOT expected=$EXPECTED"
+          if [[ "$GOT" != "$EXPECTED" ]]; then
+            echo "::error::Version mismatch: got $GOT expected $EXPECTED"
+            exit 1
+          fi
