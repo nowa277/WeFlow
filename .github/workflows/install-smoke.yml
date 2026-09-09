@@ -54,9 +54,18 @@ jobs:
 
           $info = (Get-Item $app).VersionInfo
           $got = @($info.ProductVersion, $info.FileVersion) | Where-Object { $_ } | Select-Object -First 1
-          $got = ($got -replace "^v", "").Split("+")[0].Split("-")[0].Trim()
-          Write-Host "Installed at $app version=$got expected=$expected"
-          if ($got -ne $expected) { throw "Version mismatch: got $got expected $expected" }
+          function Normalize-Version([string]$v) {
+            $v = ($v -replace "^v", "").Split("+")[0].Split("-")[0].Trim()
+            while ($v -match '\.0$') { $v = $v -replace '\.0$', '' }
+            # Keep at least major.minor.patch shape if we stripped too far
+            $parts = $v.Split('.')
+            if ($parts.Count -lt 3) { $v = ($parts + @('0') * (3 - $parts.Count)) -join '.' }
+            return $v
+          }
+          $gotN = Normalize-Version $got
+          $expN = Normalize-Version $expected
+          Write-Host "Installed at $app version=$got (normalized=$gotN) expected=$expected (normalized=$expN)"
+          if ($gotN -ne $expN) { throw "Version mismatch: got $got expected $expected" }
 
   macos-arm64-install:
     runs-on: macos-14
