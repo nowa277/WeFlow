@@ -33,8 +33,6 @@ npm run dev
 
 ## 贡献者
 
-悼念所有做出贡献的开发者！
-
 <p align="center">
   <a href="https://github.com/hicccc77/WeFlow/graphs/contributors">
     <img src="https://contrib.rocks/image?repo=hicccc77/WeFlow" alt="Contributors" />
