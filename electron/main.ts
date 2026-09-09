@@ -337,9 +337,16 @@ const normalizeUpdateTrack = (raw: unknown): 'stable' | 'preview' | 'dev' | null
   return null
 }
 
+const DEV_UPDATE_CHANNEL_ENABLED = false // re-enable when nightly-dev Release is published again
+
 const getEffectiveUpdateTrack = (): 'stable' | 'preview' | 'dev' => {
   const configuredTrack = normalizeUpdateTrack(configService?.get('updateChannel'))
-  return configuredTrack || defaultUpdateTrack
+  const track = configuredTrack || defaultUpdateTrack
+  // Avoid pointing electron-updater at a missing nightly-dev feed.
+  if (track === 'dev' && !DEV_UPDATE_CHANNEL_ENABLED) {
+    return defaultUpdateTrack === 'preview' ? 'preview' : 'stable'
+  }
+  return track
 }
 
 const isRemoteVersionNewer = (latestVersion: string, currentVersion: string): boolean => {

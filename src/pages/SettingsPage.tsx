@@ -5409,10 +5409,12 @@ JSON 输出格式：
 
   const renderUpdatesTab = () => {
     const downloadPercent = Math.max(0, Math.min(100, Number(downloadProgress?.percent || 0)))
-    const channelCards: { id: configService.UpdateChannel; title: string; desc: string }[] = [
+    // nightly-dev Release is currently missing (Dev Daily was failing: no `dev` branch).
+    // Keep the card visible but disabled until the feed is restored — avoids updater 404s.
+    const channelCards: { id: configService.UpdateChannel; title: string; desc: string; disabled?: boolean }[] = [
       { id: 'stable', title: '稳定版', desc: '正式发布的版本，适合日常使用' },
       { id: 'preview', title: '预览版', desc: '正式发布前的预览体验版本' },
-      { id: 'dev', title: '开发版', desc: '即刻体验我们的屎山代码' }
+      { id: 'dev', title: '开发版', desc: '通道暂不可用（nightly-dev 未发布）', disabled: true }
     ]
 
     return (
@@ -5465,9 +5467,12 @@ JSON 输出格式：
               return (
                 <button
                   key={channel.id}
-                  className={`update-channel-card ${active ? 'active' : ''}`}
-                  onClick={() => void handleUpdateChannelChange(channel.id)}
-                  disabled={active}
+                  className={`update-channel-card ${active ? 'active' : ''} ${channel.disabled ? 'disabled' : ''}`}
+                  onClick={() => {
+                    if (channel.disabled) return
+                    void handleUpdateChannelChange(channel.id)
+                  }}
+                  disabled={active || !!channel.disabled}
                 >
                   <div className="update-channel-title-row">
                     <span className="title">{channel.title}</span>

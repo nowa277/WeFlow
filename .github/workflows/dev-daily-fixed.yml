@@ -16,6 +16,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   FIXED_DEV_TAG: nightly-dev
+  # Requires origin/dev (created from main if missing). Prepare fails hard without it.
   TARGET_BRANCH: dev
   ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
 
